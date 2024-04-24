@@ -1,0 +1,25 @@
+#ifndef HARDWARE_H
+#define HARDWARE_H
+
+#include "driver/gpio.h"
+
+#define HARDWARE_RELAY1 GPIO_NUM_0
+#define HARDWARE_RELAY2 GPIO_NUM_22
+#define HARDWARE_RELAY3 GPIO_NUM_21
+#define HARDWARE_AMBERLED GPIO_NUM_17
+#define HARDWARE_GREENLED GPIO_NUM_23
+
+#define HARDWARE_HEADERPIN1 GPIO_NUM_2
+#define HARDWARE_HEADERPIN3 GPIO_NUM_12
+#define HARDWARE_HEADERPIN7 GPIO_NUM_16
+#define HARDWARE_HEADERPIN9 GPIO_NUM_4
+
+#define HARDWARE_BUTTON GPIO_NUM_34
+
+#define HARDWARE_BUS_RX_GPIO GPIO_NUM_13
+#define HARDWARE_BUS_TX_GPIO GPIO_NUM_15
+
+esp_err_t hardware_init(void);
+void hardware_debug(gpio_num_t  gpio_num);
+
+#endif /* HARDWARE_H */
