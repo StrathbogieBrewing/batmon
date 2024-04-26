@@ -1,4 +1,11 @@
 **/build
+network
+littlefs
+sdspi
+sntp
+onewire
+rest_server
+batmon/managed_components
 
 
 # Prerequisites
