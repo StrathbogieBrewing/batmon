@@ -19,6 +19,11 @@
 #define HARDWARE_BUS_RX_GPIO GPIO_NUM_13
 #define HARDWARE_BUS_TX_GPIO GPIO_NUM_15
 
+#define HARDWARE_SDCARD_MOSI 26
+#define HARDWARE_SDCARD_MISO 27
+#define HARDWARE_SDCARD_CLK 25
+#define HARDWARE_SDCARD_CS 33
+
 esp_err_t hardware_init(void);
 void hardware_debug(gpio_num_t  gpio_num);
 

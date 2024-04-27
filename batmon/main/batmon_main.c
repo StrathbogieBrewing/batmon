@@ -2,6 +2,7 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "nvs_flash.h"
+// #include "nvs_flash.h"
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -28,7 +29,8 @@ void app_main(void) {
     ESP_ERROR_CHECK(batmon_wifi_start_station());
 
     hardware_init();
-    batmon_littlefs_init();
+    // batmon_littlefs_init();
+    batmon_littlefs_mount_sdspi();
     ESP_ERROR_CHECK(start_rest_server(BATMON_LITTLEFS_BASE_PATH));
 
     sntp_client_init();
@@ -51,6 +53,7 @@ void app_main(void) {
                 localtime_r(&tv.tv_sec, &timeinfo);
                 strftime(strftime_buf, sizeof(strftime_buf), "%y%m%d-%H%M%S", &timeinfo);
                 ESP_LOGI(TAG, "%s.%3.3ld Device %2.2d = %d", strftime_buf, tv.tv_usec / 1000, msg.device_id, msg.value);
+                ESP_LOGI(TAG, "Free heap %d", xPortGetFreeHeapSize());
             }
         }
     }

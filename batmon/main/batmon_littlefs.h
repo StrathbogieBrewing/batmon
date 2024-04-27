@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 
+esp_err_t batmon_littlefs_mount_sdspi(void);
 void batmon_littlefs_init(void);
 
 #ifdef __cplusplus

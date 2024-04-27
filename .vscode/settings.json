@@ -4,6 +4,7 @@
         "esp_littlefs.h": "c",
         "batmon_wifi.h": "c",
         "batmon_littlefs.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "sntp_client.h": "c"
     }
 }
