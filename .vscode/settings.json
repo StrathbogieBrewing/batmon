@@ -5,6 +5,11 @@
         "batmon_wifi.h": "c",
         "batmon_littlefs.h": "c",
         "stdio.h": "c",
-        "sntp_client.h": "c"
-    }
+        "sntp_client.h": "c",
+        "stat.h": "c",
+        "compare": "c",
+        "type_traits": "c",
+        "string.h": "c"
+    },
+    "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }
