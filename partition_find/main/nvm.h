@@ -12,6 +12,7 @@ typedef enum {
     NVM_OK = EXIT_SUCCESS,
     NVM_FAIL,
     NVM_FULL,
+    NVM_ERASED,
 } nvm_err_t;
 
 typedef nvm_err_t (*nvm_init)(void);
@@ -27,6 +28,7 @@ typedef struct nvm_device_t {
     uint32_t sector_size;
     uint32_t sector_count;
     uint32_t erase_count;
+    uint8_t erased_value
 } nvm_device_t;
 
 #ifdef __cplusplus

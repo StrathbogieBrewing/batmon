@@ -34,6 +34,7 @@ nvm_device_t nvm_esp = {
     .sector_size = NVM_ESP_SECTOR_SIZE,
     .sector_count = 0,
     .erase_count = NVM_ESP_SECTOR_SIZE,
+    .erased_value = 0xff,
 };
 
 static const esp_partition_t *nvm_esp_partition = NULL;

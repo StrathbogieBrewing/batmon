@@ -15,7 +15,7 @@
 
 #define STORAGE_TASK_PRIO 8
 
-#define STORAGE_BLOCK_SIZE (4096)
+#define STORAGE_TIMEOUT (1000 / portTICK_PERIOD_MS)
 
 static const char *TAG = "storage";
 
@@ -24,6 +24,7 @@ typedef struct storage_header_t {
     uint16_t crc;
 } storage_header_t;
 
+#define STORAGE_BLOCK_SIZE (4096)
 #define STORAGE_DATA_SIZE (STORAGE_BLOCK_SIZE - sizeof(storage_header_t))
 
 typedef struct storage_block_t {
@@ -31,29 +32,27 @@ typedef struct storage_block_t {
     uint8_t data[STORAGE_DATA_SIZE];
 } storage_block_t;
 
+typedef struct storage_buffer_t {
+    storage_block_t block;
+    uint16_t index;
+} storage_buffer_t;
+
 typedef struct storage_ctx_t {
     SemaphoreHandle_t mutex;
     nvm_device_t *device;
 
-    storage_block_t cache_buffer;
-    storage_block_t read_buffer;
-    storage_block_t write_buffer;
+    storage_buffer_t read_buffer;
+    storage_buffer_t write_buffer;
 
-    uint16_t block_count;
-    uint16_t block_size;
-
-    uint16_t buffer_size;
-    uint16_t write_buffer_index;
-    uint16_t read_buffer_index;
-
-    uint32_t read_block;
-    uint32_t write_block;
+    uint32_t read_block_index;
+    uint32_t write_block_index;
 
 } storage_ctx_t;
 
 static storage_ctx_t storage_ctx = {0};
 
-static uint16_t storage_crc16(uint8_t *buffer, uint16_t crc, uint16_t size) {
+static uint16_t storage_crc16(uint8_t buffer[], uint16_t size) {
+    uint16_t crc = 0xFFFF;
     for (uint16_t index = 0; index < size; index++) {
         crc = crc ^ buffer[index];
         for (uint8_t i = 0; i < 8; ++i) {
@@ -66,57 +65,93 @@ static uint16_t storage_crc16(uint8_t *buffer, uint16_t crc, uint16_t size) {
     return crc;
 }
 
-static nvm_err_t storage_crc_block(storage_block_t *block) {
-    return storage_crc16(block->data, 0xFFFF, STORAGE_DATA_SIZE);
-}
-
-static nvm_err_t storage_check_block(storage_block_t *block) {
+static nvm_err_t storage_write_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    if (block->header.magic != STORAGE_MAGIC) {
-        error = NVM_FAIL;
-    }
-    if (block->header.crc != storage_crc_block(block)) {
-        error = NVM_FAIL;
-    }
+    handle->write_buffer.block.header.magic = STORAGE_MAGIC;
+    handle->write_buffer.block.header.crc =
+        storage_crc16(handle->write_buffer.block.data, STORAGE_DATA_SIZE);
+    error =
+        handle->device->write(handle->write_block_index, (uint8_t *)&handle->write_buffer.block);
+
+    memset(&handle->write_buffer, 0, sizeof(handle->write_buffer));
+    handle->write_block_index += 1;
     return error;
 }
 
-static void storage_write(storage_handle_t handle) {
+static nvm_err_t storage_read_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    if (xSemaphoreTake(handle->mutex, portMAX_DELAY) == pdTRUE) {
-        handle->write_buffer.header.magic = STORAGE_MAGIC;
-        handle->write_buffer.header.crc = storage_crc_block(block);
-        error = handle->device->write(handle->write_block, (uint8_t *)&handle->write_buffer);
-        xSemaphoreGive(handle->mutex);
-    } else {
-        error = NVM_FAIL;
-    }
-    return error;
-}
-
-nvm_err_t storage_format(storage_handle_t handle) {
-    nvm_err_t error = NVM_OK;
-    if (xSemaphoreTake(handle->mutex, portMAX_DELAY) == pdTRUE) {
-        error = handle->device->erase(0, handle->device->sector_count);
-        xSemaphoreGive(handle->mutex);
-    } else {
-        error = NVM_FAIL;
-    }
-    return error;
-}
-
-nvm_err_t storage_read(storage_handle_t handle) {
-    nvm_err_t error = NVM_OK;
-    if (xSemaphoreTake(handle->mutex, portMAX_DELAY) == pdTRUE) {
-        error = handle->device->read(handle->read_block, (uint8_t *)&handle->read_buffer);
-        if (error == NVM_OK) {
-            error = storage_check_block(&handle->read_buffer);
+    error = handle->device->read(handle->read_block_index, (uint8_t *)&handle->read_buffer.block);
+    if (error == NVM_OK) {
+        // test if block is valid, invalid or erased
+        if (handle->read_buffer.block.header.magic != STORAGE_MAGIC) {
+            error = NVM_FAIL; // wrong magic number
         }
-        xSemaphoreGive(handle->mutex);
+        if (handle->read_buffer.block.header.crc !=
+            storage_crc16(handle->read_buffer.block.data, STORAGE_DATA_SIZE)) {
+            error = NVM_FAIL; // bad crc
+        }
+
+        uint16_t index = STORAGE_DATA_SIZE;
+        while (index) {
+            index--;
+            if (handle->read_buffer.block.data[index] != '\0') {
+                handle->read_buffer.index = index;
+
+                break; // locate first non-zero byte from end of block
+            }
+        }
+    }
+
+    if (index < 0) {
+        error = NVM_ERASED; // block is erased
+    } else if (index < STORAGE_DATA_SIZE) {
+        handle->read_buffer.index = index + 1;
+        error = NVM_OK; // block is valid
     } else {
         error = NVM_FAIL;
     }
-    return error;
+
+    uint8_t *block = (uint8_t *)&handle->read_buffer.block + STORAGE_BLOCK_SIZE - 1;
+    do {
+        if (*block != '\0') {
+            break; // locate first non-zero byte from end of block
+            block -= 1;
+        }
+    } while (block >=
+             (uint8_t *)&handle->read_buffer.block) if (block <
+                                                        (uint8_t *)&handle->read_buffer.block) {
+        error = NVM_ERASED; // block is erased
+    }
+    else if (block > (uint8_t *)&handle->read_buffer.block.data) {
+        handle->read_buffer.index = 0;
+        error = NVM_FAIL; // block is valid
+    }
+    else {
+        handle->read_buffer.index = block - (uint8_t *)&handle->read_buffer.block.data + 1;
+    }
+
+    for (uint16_t i = 0; i < STORAGE_BLOCK_SIZE; i++) {
+        if (*block++ != handle->device->erased_value) {
+            error = NVM_FAIL; // not erased
+            break;
+        }
+    }
+
+    if (error == NVM_FAIL) {
+        error = NVM_ERASED; // finally check if the block is erased
+        uint8_t *block = (uint8_t *)&handle->read_buffer.block;
+        for (uint16_t i = 0; i < STORAGE_BLOCK_SIZE; i++) {
+            if (*block++ != handle->device->erased_value) {
+                error = NVM_FAIL; // not erased
+                break;
+            }
+        }
+    }
+}
+if (handle->read_block_index) {
+    handle->read_block_index -= 1;
+}
+return error;
 }
 
 nvm_err_t storage_init(storage_handle_t *handle, nvm_device_t *device) {
@@ -125,40 +160,36 @@ nvm_err_t storage_init(storage_handle_t *handle, nvm_device_t *device) {
     (*handle)->device = device;
     (*handle)->device->init();
     (*handle)->mutex = xSemaphoreCreateMutex();
-    (*handle)->block_count = (*handle)->device->sector_count;
-    (*handle)->block_size = (*handle)->device->sector_size;
 
-    (*handle)->read_block = 0; // check if media is formatted
-    if (storage_read(*handle) != NVM_OK) {
+    (*handle)->read_block_index = 0; // check if media is formatted
+    if (storage_read_block(*handle) != NVM_OK) {
         storage_format(*handle);
     }
 
-    uint32_t low_block = 1; // binary search for the first unused block
-    uint32_t high_block = (*handle)->block_count - 1;
-    while (low_block != high_block) {
-        uint32_t mid_block = low_block + (high_block - low_block) / 2;
-        (*handle)->read_block = mid_block;
-        if (storage_read(*handle) == NVM_OK) {
-            low_block = mid_block + 1;
+    uint32_t low_block_index = 1; // binary search for the first unused block
+    uint32_t high_block_index = (*handle)->device->sector_count - 1;
+    while (low_block_index != high_block_index) {
+        uint32_t mid_block_index = low_block_index + (high_block_index - low_block_index) / 2;
+        (*handle)->read_block_index = mid_block_index;
+        if (storage_read_block(*handle) == NVM_OK) {
+            low_block_index = mid_block_index + 1;
         } else {
-            high_block = mid_block;
+            high_block_index = mid_block_index;
         }
     }
-    (*handle)->write_block = low_block; // initialise read and write blocks
-    (*handle)->write_buffer_index = 0;
-    (*handle)->read_block = low_block - 1;
-    (*handle)->read_buffer_index = 0;
+    (*handle)->write_block_index = low_block_index; // initialise read and write block indexes
+    (*handle)->read_block_index = low_block_index - 1;
     return error;
 }
 
-nvm_err_t storage_read_sync(storage_handle_t handle) {
+nvm_err_t storage_format(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    if (xSemaphoreTake(handle->mutex, portMAX_DELAY) == pdTRUE) {
-        handle->read_block = handle->write_block - 1;
-        memcpy(&handle->read_buffer, &handle->write_buffer, handle->block_size);
-        handle->read_buffer_index = handle->write_buffer_index;
-        if (handle->read_buffer_index == 0) {
-            error = storage_read(*handle);
+    if (xSemaphoreTake(handle->mutex, STORAGE_TIMEOUT) == pdTRUE) {
+        error = handle->device->erase(0, handle->device->sector_count);
+        if (error == NVM_OK) {
+            handle->write_block_index = 0;
+            memset(handle->write_buffer.block.data, 0, STORAGE_DATA_SIZE);
+            error = storage_write_block(handle); // write first block with zeros
         }
         xSemaphoreGive(handle->mutex);
     } else {
@@ -167,75 +198,53 @@ nvm_err_t storage_read_sync(storage_handle_t handle) {
     return error;
 }
 
-nvm_err_t storage_read_str(storage_handle_t handle, char *s, size_t maxlen) {
-    nvm_err_t err = nvm_read(uint32_t block_index, nvm_block_t * block);
-    return NVM_OK;
+nvm_err_t storage_read_sync(storage_handle_t handle) {
+    nvm_err_t error = NVM_OK;
+    if (xSemaphoreTake(handle->mutex, STORAGE_TIMEOUT) == pdTRUE) {
+        handle->read_block_index = handle->write_block_index - 1;
+        memcpy(&handle->read_buffer, &handle->write_buffer, sizeof(handle->read_buffer));
+        xSemaphoreGive(handle->mutex);
+    } else {
+        error = NVM_FAIL;
+    }
+    return error;
 }
 
-nvm_err_t storage_write_str(storage_handle_t handle, const char *s, size_t maxlen) {
-    nvm_err_t err = nvm_write(uint32_t block_index, nvm_block_t * block);
-    return NVM_OK;
+nvm_err_t storage_write_sync(storage_handle_t handle) {
+    nvm_err_t error = NVM_OK;
+    if (xSemaphoreTake(handle->mutex, STORAGE_TIMEOUT) == pdTRUE) {
+        error = storage_write_block(handle);
+        xSemaphoreGive(handle->mutex);
+    } else {
+        error = NVM_FAIL;
+    }
+    return error;
 }
 
-nvm_err_t storage_write_sync(storage_handle_t handle) { return NVM_OK; }
+nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxlen) {
+    nvm_err_t error = NVM_OK;
+    if (xSemaphoreTake(handle->mutex, STORAGE_TIMEOUT) == pdTRUE) {
 
-// }
-// if (error == NVM_OK) {
-//     if ((STORAGE_BLOCK_SIZE % handle->device->block_size != 0) ||
-//         (STORAGE_BLOCK_SIZE < handle->device->block_size)) {
-//         ESP_LOGE(TAG, "init failed block size");
-//         error = NVM_FAIL;
-//     } else {
-// (*handle)->sectors_per_block = STORAGE_BLOCK_SIZE / (*handle)->device->block_size;
-// }
-// }
-// if (error == NVM_OK) {
+        if (handle->read_buffer.index == 0) {
+            error = storage_read_block(handle);
+        }
 
-// check if the first block has been initialed
-// nvm_err_t err = (*handle)->device->read(0, (nvm_block_t)&handle->cache_buffer);
-// if (err != NVM_OK) {
-//     ESP_LOGE(TAG, "init failed nvm_read");
-//     error = NVM_FAIL;
-// }
-// if (storage_check_block(&handle->cache_buffer) != NVM_OK) {
-//     nvm_erase(0, handle->nvm_info.block_count); // erase everything
-//     memset(&handle->cache_buffer, '\0', NVM_BLOCK_SIZE);
-//     storage_write_block(0, &handle->cache_buffer);
-//     handle->write_block = 1;
-//     handle->ready = true;
-//     ESP_LOGI(TAG, "init erased everything");
-//     ESP_LOGI(TAG, "init first empty block  %" PRIx32, handle->write_block);
-// } else {
-//     uint32_t low_block = 1; // binary search for first unused block
-//     uint32_t high_block = handle->nvm_info.block_count;
-//     while (low_block != high_block) {
-//         uint32_t mid_block = low_block + (high_block - low_block) / 2;
-//         nvm_read(mid_block, (nvm_block_t)&handle->cache_buffer);
-//         if (handle->cache_buffer.header.magic == STORAGE_MAGIC) {
-//             low_block = mid_block + 1;
-//         } else {
-//             high_block = mid_block;
-//         }
-//     }
-//     // if(low_block == handle->nvm_info.block_count){
-//     //     ESP_LOGE(TAG, "init failed full");
-//     //     error = STORAGE_FULL;
-//     // } else {
-//     handle->write_block = low_block;
-//     handle->read_block = low_block - 1;
-//     handle->ready = true;
-//     ESP_LOGI(TAG, "init first empty block %" PRIx32, handle->write_block);
-//     // }
-// }
-// }
+        handle->read_block_index = handle->write_block_index - 1;
+        memcpy(&handle->read_buffer, &handle->write_buffer, sizeof(handle->read_buffer));
+        xSemaphoreGive(handle->mutex);
+    } else {
+        error = NVM_FAIL;
+    }
+    return error;
+}
 
-// if(low_block == handle->nvm_info.block_count){
-//     ESP_LOGE(TAG, "init failed full");
-//     return STORAGE_FULL;
-// }
-// handle->write_block = low_block;
-// handle->read_block = low_block - 1;
-// handle->ready = true;
-// ESP_LOGI(TAG, "init first empty block %" PRIx32, handle->write_block);
-// *handle = &storage_handle;
-// return error;
+nvm_err_t storage_write_string(storage_handle_t handle, const char *string) {
+    nvm_err_t error = NVM_OK;
+    uint16_t size = strlen(string) + 1; // we want to include the terminating null character
+    if (size + handle->write_buffer.index > STORAGE_DATA_SIZE) {
+        error = storage_write_block(handle);
+    }
+    memcpy(&handle->write_buffer.block.data[handle->write_buffer.index], s, size);
+    handle->write_buffer.index += size;
+    return error;
+}
