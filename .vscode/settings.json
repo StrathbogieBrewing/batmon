@@ -9,7 +9,9 @@
         "stat.h": "c",
         "compare": "c",
         "type_traits": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "nvm_file.h": "c",
+        "storage.h": "c"
     },
     "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }
