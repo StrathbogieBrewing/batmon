@@ -35,6 +35,7 @@ typedef struct storage_ctx_t {
 
     storage_buffer_t read_buffer;
     storage_buffer_t write_buffer;
+    storage_buffer_t cache_buffer;
 
     uint32_t read_block_index;
     uint32_t write_block_index;
@@ -60,14 +61,20 @@ static uint16_t storage_crc16(uint8_t buffer[], uint16_t size) {
 
 static nvm_err_t storage_write_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    if (handle->write_block_index >= handle->device->sector_count) {
-        error = NVM_FULL;
-        LOG_DEBUG("no more blocks at %d", handle->write_block_index);
-    } else if (handle->write_buffer.index != 0) {
+    if (handle->write_buffer.index != 0) {
         handle->write_buffer.block.header.magic = STORAGE_MAGIC;
         handle->write_buffer.block.header.counter = handle->write_counter++;
         handle->write_buffer.block.header.crc =
             storage_crc16(handle->write_buffer.block.data, STORAGE_DATA_SIZE);
+        if (handle->write_block_index >= handle->device->sector_count) {
+            handle->write_block_index = 1; // wrap to beginning of media
+            LOG_DEBUG("wrapping back to first block");
+        }
+        if (handle->device->read(handle->write_block_index,
+                                 (uint8_t *)&handle->cache_buffer.block) != NVM_ERASED) {
+            error = handle->device->erase(handle->write_block_index, 1);
+            LOG_DEBUG("erased block %d before write", handle->write_block_index);
+        }
         error = handle->device->write(handle->write_block_index,
                                       (uint8_t *)&handle->write_buffer.block);
         memset(&handle->write_buffer, 0, sizeof(handle->write_buffer));
@@ -76,16 +83,12 @@ static nvm_err_t storage_write_block(storage_handle_t handle) {
     } else {
         LOG_DEBUG("nothing to write");
     }
-
     return error;
 }
 
 static nvm_err_t storage_read_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
     error = handle->device->read(handle->read_block_index, (uint8_t *)&handle->read_buffer.block);
-    if (handle->read_block_index) {
-        handle->read_block_index -= 1;
-    }
     handle->read_buffer.index = STORAGE_DATA_SIZE - 1;
     if (error == NVM_OK) { // test if block is valid
         if (handle->read_buffer.block.header.magic != STORAGE_MAGIC) {
@@ -107,6 +110,11 @@ static nvm_err_t storage_read_block(storage_handle_t handle) {
                 break;
             }
         }
+    }
+    if (handle->read_block_index) {
+        handle->read_block_index -= 1;  // advance to next read block
+    } else {
+        handle->read_block_index = handle->device->sector_count - 1;  // wrap to end of media
     }
     return error;
 }
