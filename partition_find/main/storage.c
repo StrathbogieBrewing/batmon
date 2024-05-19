@@ -37,8 +37,8 @@ typedef struct storage_ctx_t {
     storage_buffer_t write_buffer;
     storage_buffer_t cache_buffer;
 
-    uint32_t read_block_index;
-    uint32_t write_block_index;
+    uint32_t read_block_index;  // next block to read
+    uint32_t write_block_index; // next block to be written
     uint32_t write_counter;
 
 } storage_ctx_t;
@@ -89,8 +89,8 @@ static nvm_err_t storage_write_block(storage_handle_t handle) {
 static nvm_err_t storage_read_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
     error = handle->device->read(handle->read_block_index, (uint8_t *)&handle->read_buffer.block);
-    handle->read_buffer.index = STORAGE_DATA_SIZE - 1;
-    if (error == NVM_OK) { // test if block is valid
+    handle->read_buffer.index = STORAGE_DATA_SIZE - 1; // start reading from end of block
+    if (error == NVM_OK) {                             // test if block is valid
         if (handle->read_buffer.block.header.magic != STORAGE_MAGIC) {
             error = NVM_FAIL; // wrong magic number
         }
@@ -112,9 +112,9 @@ static nvm_err_t storage_read_block(storage_handle_t handle) {
         }
     }
     if (handle->read_block_index) {
-        handle->read_block_index -= 1;  // advance to next read block
+        handle->read_block_index -= 1; // advance to next read block
     } else {
-        handle->read_block_index = handle->device->sector_count - 1;  // wrap to end of media
+        handle->read_block_index = handle->device->sector_count - 1; // wrap to last block
     }
     return error;
 }
@@ -126,23 +126,32 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
     (*handle)->device = device;
     (*handle)->device->open();
 
-    (*handle)->read_block_index = 0; // check if media is formatted
+    (*handle)->read_block_index = 0; // check if media is formatted by checking block 0
     if (storage_read_block(*handle) != NVM_OK) {
         storage_format(*handle);
     }
-
-    uint32_t low_block_index = 1; // binary search for the first unused block
     uint32_t high_block_index = (*handle)->device->sector_count - 1;
+    uint32_t low_block_index = 1; // binary search for the first unused block
+    uint32_t counter = 0;
+    (*handle)->read_block_index = low_block_index;
+    if(storage_read_block(*handle) == NVM_OK){
+         LOG_DEBUG("read block %d ok", low_block_index);
+        counter = (*handle)->read_buffer.block.header.counter;
+    }
     while (low_block_index != high_block_index) {
         uint32_t mid_block_index = low_block_index + (high_block_index - low_block_index) / 2;
         (*handle)->read_block_index = mid_block_index;
         error = storage_read_block(*handle);
         if (error == NVM_OK) {
             LOG_DEBUG("read block %d ok", mid_block_index);
-            low_block_index = mid_block_index + 1;
-            (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
+            if (counter < (*handle)->read_buffer.block.header.counter) {
+                low_block_index = mid_block_index;
+            } else {
+                high_block_index = mid_block_index;
+            }
+            counter = (*handle)->read_buffer.block.header.counter;
         } else {
-            high_block_index = mid_block_index;
+            high_block_index = mid_block_index; // must be first pass of formated media
             if (error == NVM_ERASED) {
                 LOG_DEBUG("read block %d erased", mid_block_index);
             } else {
@@ -150,9 +159,10 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
             }
         }
     }
-    (*handle)->write_block_index = low_block_index; // initialise read and write block indexes
-    (*handle)->read_block_index = low_block_index - 1;
-    LOG_DEBUG("write block index %d ", (*handle)->write_block_index);
+    (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
+    LOG_DEBUG("write counter %d , counter %d", (*handle)->write_counter, counter);
+    (*handle)->read_block_index = low_block_index; // initialise read and write block indexes
+    (*handle)->write_block_index = low_block_index + 1;
     LOG_DEBUG("read block index %d ", (*handle)->read_block_index);
     return error;
 }
