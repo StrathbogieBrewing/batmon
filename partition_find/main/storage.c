@@ -161,6 +161,9 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
     }
     (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
     LOG_DEBUG("write counter %d , counter %d", (*handle)->write_counter, counter);
+    if((*handle)->write_counter == 0){
+        low_block_index = 0;
+    }
     (*handle)->read_block_index = low_block_index; // initialise read and write block indexes
     (*handle)->write_block_index = low_block_index + 1;
     LOG_DEBUG("read block index %d ", (*handle)->read_block_index);

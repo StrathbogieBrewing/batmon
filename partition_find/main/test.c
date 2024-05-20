@@ -14,11 +14,11 @@ int main(int argc, char **argv) {
 
     nvm_err_t error = storage_open(&handle, &nvm_file);
 
-    storage_write_string(handle, "Test");
+    // storage_write_string(handle, "Test");
     for (int i = 0; i < 16; i++) {
 
         uint8_t buffer[nvm_file.sector_size];
-        sprintf(buffer, "ID%5.5d, T%5.5d", i, (uint16_t)te.tv_sec / 60);
+        sprintf(buffer, "I%3.3dT%5.5d     ", i, (uint16_t)te.tv_sec / 60);
         storage_write_string(handle, buffer);
     }
     storage_write_string(handle, "Test finished");
