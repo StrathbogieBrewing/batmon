@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define TEST_DATA_SIZE (4096 * 15)
+#define TEST_DATA_SIZE (256 * 14)
 
 static uint8_t random_data[TEST_DATA_SIZE] = {0};
 

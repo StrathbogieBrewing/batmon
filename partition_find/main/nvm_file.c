@@ -49,13 +49,17 @@ static nvm_err_t nvm_file_open(void) {
 }
 
 static nvm_err_t nvm_file_read(uint32_t sector_index, uint8_t *sector_buffer) {
-    nvm_err_t error = NVM_OK;
+    nvm_err_t error = NVM_ERASED;
     if (sector_index >= NVM_FILE_SECTOR_COUNT) {
         LOG_ERROR("sector out of range %d", sector_index);
         error = NVM_FAIL;
     } else {
-        memcpy(sector_buffer, &nvm_file_data[sector_index * NVM_SECTOR_SIZE],
-               NVM_SECTOR_SIZE);
+        for (int index = 0 ; index < NVM_SECTOR_SIZE; index++) {
+            sector_buffer[index] = nvm_file_data[sector_index * NVM_SECTOR_SIZE + index];
+            if(sector_buffer[index] != nvm_file.erased_value) {
+                error = NVM_OK;
+            }
+        } 
     }
     return error;
 }

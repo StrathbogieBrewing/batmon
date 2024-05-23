@@ -8,7 +8,7 @@ extern "C" {
 #include <nvm.h>
 
 // #define NVM_SECTOR_SIZE (4096)
-#define NVM_SECTOR_SIZE (128)
+#define NVM_SECTOR_SIZE (256)
 
 extern nvm_device_t nvm_file;
 

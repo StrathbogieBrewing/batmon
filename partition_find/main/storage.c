@@ -59,6 +59,20 @@ static uint16_t storage_crc16(uint8_t buffer[], uint16_t size) {
     return crc;
 }
 
+// static nvm_err_t storage_block_is_erased(storage_block_t *block, uint8_t erased_value) {
+//     nvm_err_t error = NVM_ERASED;
+//     for (uint8_t *block_ptr = (uint8_t *)block;
+//          block_ptr < ((uint8_t *)block) + STORAGE_BLOCK_SIZE; block_ptr++) {
+//         if (*block_ptr != erased_value) {
+//             error = NVM_FAIL; // not erased
+//             LOG_DEBUG("not erased at %ld : %d", block - (uint8_t *)&handle->read_buffer.block,
+//                       *block);
+//             break;
+//         }
+//     }
+//     return error;
+// }
+
 static nvm_err_t storage_write_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
     if (handle->write_buffer.index != 0) {
@@ -100,18 +114,18 @@ static nvm_err_t storage_read_block(storage_handle_t handle) {
             error = NVM_FAIL; // bad crc
         }
     }
-    if (error == NVM_FAIL) { // test if block is erased
-        error = NVM_ERASED;
-        for (uint8_t *block = (uint8_t *)&handle->read_buffer.block;
-             block < (uint8_t *)&handle->read_buffer.block + STORAGE_BLOCK_SIZE; block++) {
-            if (*block != handle->device->erased_value) {
-                error = NVM_FAIL; // not erased
-                LOG_DEBUG("not erased at %ld : %d", block - (uint8_t *)&handle->read_buffer.block,
-                          *block);
-                break;
-            }
-        }
-    }
+    // if (error == NVM_FAIL) { // test if block is erased
+    //     error = NVM_ERASED;
+    //     for (uint8_t *block = (uint8_t *)&handle->read_buffer.block;
+    //          block < (uint8_t *)&handle->read_buffer.block + STORAGE_BLOCK_SIZE; block++) {
+    //         if (*block != handle->device->erased_value) {
+    //             error = NVM_FAIL; // not erased
+    //             LOG_DEBUG("not erased at %ld : %d", block - (uint8_t *)&handle->read_buffer.block,
+    //                       *block);
+    //             break;
+    //         }
+    //     }
+    // }
     if (handle->read_block_index > 1) {
         handle->read_block_index -= 1; // advance to next read block
     } else {
@@ -179,7 +193,6 @@ nvm_err_t storage_format(storage_handle_t handle) {
         handle->write_block_index = 0;
         memset(&handle->write_buffer.block, 0, sizeof(handle->write_buffer.block));
         storage_write_string(handle, "NVM STRING LOGGER");
-
         storage_write_sync(handle);
     } else {
         LOG_ERROR("erase failed");
@@ -207,7 +220,7 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
     // LOG_DEBUG("read string");
 
     if (handle->read_buffer.index == 0) {
-        if(handle->read_block_index == handle->write_block_index) {
+        if (handle->read_block_index == handle->write_block_index) {
             error = NVM_EMPTY;
         } else {
             error = storage_read_block(handle); // read new data buffer
@@ -229,21 +242,24 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
     }
     if ((error == NVM_OK) && (handle->read_buffer.index != 0)) {
 
-        uint16_t end_index = handle->read_buffer.index - 1;  // this should be the null terminator
-        uint16_t start_index = end_index - 1;  // this should be the last character of the string
+        uint16_t end_index = handle->read_buffer.index - 1; // this should be the null terminator
+        uint16_t start_index = end_index - 1; // this should be the last character of the string
         while ((handle->read_buffer.block.data[start_index] != '\0') && (start_index != 0)) {
-            start_index -= 1; // step back through characters to the null before the beginning of the string
+            start_index -=
+                1; // step back through characters to the null before the beginning of the string
         }
-        if(start_index != 0) {
+        if (start_index != 0) {
             start_index += 1; // if its the null terminator, step forward to the start of the string
         }
         handle->read_buffer.index = start_index;
-        // LOG_DEBUG("read string start : 0x%2.2X\tend : 0x%2.2X\tfrom 0x%4.4X", start_index, end_index, handle->read_block_index);
+        // LOG_DEBUG("read string start : 0x%2.2X\tend : 0x%2.2X\tfrom 0x%4.4X", start_index,
+        // end_index, handle->read_block_index);
         if (end_index - start_index > maxlen) {
             error = NVM_FAIL;
         } else {
-            // LOG_DEBUG("read string 0x%4.4X : 0x%2.2X : <%s>", handle->read_block_index, start_index, &handle->read_buffer.block.data[start_index]);
-            strcpy(string, (char*)&handle->read_buffer.block.data[start_index]);
+            // LOG_DEBUG("read string 0x%4.4X : 0x%2.2X : <%s>", handle->read_block_index,
+            // start_index, &handle->read_buffer.block.data[start_index]);
+            strcpy(string, (char *)&handle->read_buffer.block.data[start_index]);
         }
     }
     return error;

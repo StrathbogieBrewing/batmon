@@ -61,3 +61,4 @@ Module.symvers
 Mkfile.old
 dkms.conf
 partition_find/main/all
+partition_find/main/nvm_file_data.bin
