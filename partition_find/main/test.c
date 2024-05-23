@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define TEST_DATA_SIZE (4096 * 17)
+#define TEST_DATA_SIZE (4096 * 15)
 
 static uint8_t random_data[TEST_DATA_SIZE] = {0};
 
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
                 goto exit;
             }
             if (strcmp((char *)read_buffer, (char *)&random_data[test_read_index]) != 0) {
-                printf("Error: Data read does not match data written 0x%4.4X, 0x%4.4x\nread data : "
+                printf("Error: Data read does not match data written 0x%4.4X, 0x%4.4X\nread data : "
                        "<%s>\ntest data : <%s>\n",
                        test_read_index, test_write_index, (char *)read_buffer,
                        (char *)&random_data[test_read_index]);

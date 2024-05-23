@@ -88,7 +88,7 @@ static nvm_err_t storage_write_block(storage_handle_t handle) {
 
 static nvm_err_t storage_read_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    LOG_DEBUG("read block %d", handle->read_block_index);
+    // LOG_DEBUG("read block %d", handle->read_block_index);
     error = handle->device->read(handle->read_block_index, (uint8_t *)&handle->read_buffer.block);
     handle->read_buffer.index = STORAGE_DATA_SIZE - 1; // start reading from end of block
     if (error == NVM_OK) {                             // test if block is valid
@@ -189,7 +189,7 @@ nvm_err_t storage_format(storage_handle_t handle) {
 
 nvm_err_t storage_read_sync(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    LOG_DEBUG("read sync");
+    // LOG_DEBUG("read sync");
     handle->read_block_index = handle->write_block_index - 1;
     memcpy(&handle->read_buffer, &handle->write_buffer, sizeof(handle->read_buffer));
     return error;
@@ -197,7 +197,7 @@ nvm_err_t storage_read_sync(storage_handle_t handle) {
 
 nvm_err_t storage_write_sync(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    LOG_DEBUG("write sync");
+    // LOG_DEBUG("write sync");
     error = storage_write_block(handle);
     return error;
 }
@@ -221,7 +221,7 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
                 LOG_DEBUG("read buffer empty");
                 error = NVM_EMPTY;
             } else {
-                LOG_DEBUG("read buffer index %d", handle->read_buffer.index);
+                // LOG_DEBUG("read buffer index %d", handle->read_buffer.index);
             }
         } else {
             LOG_DEBUG("read block failed");
@@ -251,7 +251,7 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
 
 nvm_err_t storage_write_string(storage_handle_t handle, const char *string) {
     nvm_err_t error = NVM_OK;
-    LOG_DEBUG("write string : %s", string);
+    // LOG_DEBUG("write string : %s", string);
     uint16_t size = strlen(string) + 1; // we want to include the terminating null character
     if (handle->write_buffer.index + size > STORAGE_DATA_SIZE) {
         error = storage_write_block(handle);
