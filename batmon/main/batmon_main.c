@@ -8,7 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "batmon_littlefs.h"
+// #include "batmon_littlefs.h"
 #include "batmon_wifi.h"
 #include "driver/gpio.h"
 #include "hardware.h"
@@ -30,8 +30,8 @@ void app_main(void) {
 
     hardware_init();
     // batmon_littlefs_init();
-    batmon_littlefs_mount_sdspi();
-    ESP_ERROR_CHECK(start_rest_server(BATMON_LITTLEFS_BASE_PATH));
+    // batmon_littlefs_mount_sdspi();
+    // ESP_ERROR_CHECK(start_rest_server(BATMON_LITTLEFS_BASE_PATH));
 
     sntp_client_init();
 

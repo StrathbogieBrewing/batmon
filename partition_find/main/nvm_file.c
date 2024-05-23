@@ -5,6 +5,12 @@
 #include "log.h"
 #include "nvm_file.h"
 
+
+#define NVM_FILE_SECTOR_COUNT 16
+// #define NVM_SECTOR_SIZE (1024 * 4)
+// #define NVM_FILE_SECTOR_COUNT 16
+#define NVM_FILE_IMAGE_NAME "nvm_file_data.bin"
+
 static nvm_err_t nvm_file_open(void);
 static nvm_err_t nvm_file_read(uint32_t sector_index, uint8_t *sector_buffer);
 static nvm_err_t nvm_file_write(uint32_t sector_index, uint8_t *sector_buffer);
@@ -17,13 +23,13 @@ nvm_device_t nvm_file = {
     .write = nvm_file_write,
     .erase = nvm_file_erase,
     .close = nvm_file_close,
-    .sector_size = NVM_FILE_SECTOR_SIZE,
+    .sector_size = NVM_SECTOR_SIZE,
     .sector_count = NVM_FILE_SECTOR_COUNT,
-    .erase_count = NVM_FILE_SECTOR_SIZE,
-    .erased_value = 0xff,
+    .erase_count = NVM_SECTOR_SIZE,
+    .erased_value = 0xFF,
 };
 
-static uint8_t nvm_file_data[NVM_FILE_SECTOR_SIZE * NVM_FILE_SECTOR_COUNT];
+static uint8_t nvm_file_data[NVM_SECTOR_SIZE * NVM_FILE_SECTOR_COUNT];
 
 static nvm_err_t nvm_file_open(void) {
     nvm_err_t error = NVM_OK;
@@ -51,8 +57,8 @@ static nvm_err_t nvm_file_read(uint32_t sector_index, uint8_t *sector_buffer) {
         LOG_ERROR("sector out of range %d", sector_index);
         error = NVM_FAIL;
     } else {
-        memcpy(sector_buffer, &nvm_file_data[sector_index * NVM_FILE_SECTOR_SIZE],
-               NVM_FILE_SECTOR_SIZE);
+        memcpy(sector_buffer, &nvm_file_data[sector_index * NVM_SECTOR_SIZE],
+               NVM_SECTOR_SIZE);
     }
     return error;
 }
@@ -63,8 +69,8 @@ static nvm_err_t nvm_file_write(uint32_t sector_index, uint8_t *sector_buffer) {
         LOG_ERROR("sector out of range %d", sector_index);
         error = NVM_FAIL;
     } else {
-        memcpy(&nvm_file_data[sector_index * NVM_FILE_SECTOR_SIZE], sector_buffer,
-               NVM_FILE_SECTOR_SIZE);
+        memcpy(&nvm_file_data[sector_index * NVM_SECTOR_SIZE], sector_buffer,
+               NVM_SECTOR_SIZE);
     }
     return error;
 }
@@ -75,8 +81,8 @@ static nvm_err_t nvm_file_erase(uint32_t sector_index, uint32_t sector_count) {
         LOG_ERROR("sectors out of range %d", sector_index);
         error = NVM_FAIL;
     } else {
-        memset(&nvm_file_data[sector_index * NVM_FILE_SECTOR_SIZE], nvm_file.erased_value,
-               sector_count * NVM_FILE_SECTOR_SIZE);
+        memset(&nvm_file_data[sector_index * NVM_SECTOR_SIZE], nvm_file.erased_value,
+               sector_count * NVM_SECTOR_SIZE);
     }
     return error;
 }

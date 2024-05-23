@@ -17,8 +17,7 @@ typedef struct storage_header_t {
     uint32_t flags;
 } storage_header_t;
 
-#define STORAGE_BLOCK_SIZE NVM_FILE_SECTOR_SIZE
-// #define STORAGE_BLOCK_SIZE (256)
+#define STORAGE_BLOCK_SIZE NVM_SECTOR_SIZE
 #define STORAGE_DATA_SIZE (STORAGE_BLOCK_SIZE - sizeof(storage_header_t))
 
 typedef struct storage_block_t {
@@ -205,10 +204,14 @@ nvm_err_t storage_write_sync(storage_handle_t handle) {
 
 nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxlen) {
     nvm_err_t error = NVM_OK;
-    LOG_DEBUG("read string");
+    // LOG_DEBUG("read string");
 
     if (handle->read_buffer.index == 0) {
-        error = storage_read_block(handle); // read new data buffer
+        if(handle->read_block_index == handle->write_block_index) {
+            error = NVM_EMPTY;
+        } else {
+            error = storage_read_block(handle); // read new data buffer
+        }
         if (error == NVM_OK) {
             while ((handle->read_buffer.block.data[handle->read_buffer.index] == '\0') &&
                    (handle->read_buffer.index != 0)) {
@@ -235,12 +238,12 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
             start_index += 1; // if its the null terminator, step forward to the start of the string
         }
         handle->read_buffer.index = start_index;
-        LOG_DEBUG("read string start : 0x%2.2X\tend : 0x%2.2X\tfrom 0x%4.4X", start_index, end_index, handle->read_block_index);
+        // LOG_DEBUG("read string start : 0x%2.2X\tend : 0x%2.2X\tfrom 0x%4.4X", start_index, end_index, handle->read_block_index);
         if (end_index - start_index > maxlen) {
             error = NVM_FAIL;
         } else {
-            LOG_DEBUG("read string 0x%4.4X : 0x%2.2X : <%s>", handle->read_block_index, start_index, &handle->read_buffer.block.data[start_index]);
-            strcpy(string, &handle->read_buffer.block.data[start_index]);
+            // LOG_DEBUG("read string 0x%4.4X : 0x%2.2X : <%s>", handle->read_block_index, start_index, &handle->read_buffer.block.data[start_index]);
+            strcpy(string, (char*)&handle->read_buffer.block.data[start_index]);
         }
     }
     return error;

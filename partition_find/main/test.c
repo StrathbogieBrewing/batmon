@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define TEST_DATA_SIZE (1024 * 8)
+#define TEST_DATA_SIZE (4096 * 17)
 
 static uint8_t random_data[TEST_DATA_SIZE] = {0};
 
@@ -59,7 +59,11 @@ int main(int argc, char **argv) {
             }
 
             uint8_t read_buffer[nvm_file.sector_size];
-            storage_read_string(handle, read_buffer, nvm_file.sector_size);
+            nvm_err_t error = storage_read_string(handle, read_buffer, nvm_file.sector_size);
+            if(error != NVM_OK) {
+                printf("Error %d: Failed to read data from storage\n", error);
+                goto exit;
+            }
             if (strcmp((char *)read_buffer, (char *)&random_data[test_read_index]) != 0) {
                 printf("Error: Data read does not match data written 0x%4.4X, 0x%4.4x\nread data : "
                        "<%s>\ntest data : <%s>\n",
@@ -80,21 +84,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    // // storage_write_string(handle, "Test");
-    // for (int i = 0; i < 16; i++) {
-
-    //     uint8_t buffer[nvm_file.sector_size];
-    //     sprintf(buffer, "I%3.3dT%5.5d     ", i, (uint16_t)te.tv_sec / 60);
-    //     storage_write_string(handle, buffer);
-    // }
-    // storage_write_string(handle, "Test finished");
-
-    // uint8_t sector_buffer[nvm_file.sector_size];
-    // nvm_file.open();
-    // nvm_file.read(0, sector_buffer);
-    // strcpy((char *)sector_buffer, "Hello, World!");
-    // nvm_file.write(0, sector_buffer);
-    // nvm_file.close();
 exit:
     error = storage_close(handle);
     return 0;
