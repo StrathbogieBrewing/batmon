@@ -14,6 +14,7 @@ typedef struct storage_header_t {
     uint32_t magic;
     uint32_t counter;
     uint32_t crc;
+    uint32_t flags;
 } storage_header_t;
 
 #define STORAGE_BLOCK_SIZE NVM_FILE_SECTOR_SIZE
@@ -88,6 +89,7 @@ static nvm_err_t storage_write_block(storage_handle_t handle) {
 
 static nvm_err_t storage_read_block(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
+    LOG_DEBUG("read block %d", handle->read_block_index);
     error = handle->device->read(handle->read_block_index, (uint8_t *)&handle->read_buffer.block);
     handle->read_buffer.index = STORAGE_DATA_SIZE - 1; // start reading from end of block
     if (error == NVM_OK) {                             // test if block is valid
@@ -111,7 +113,7 @@ static nvm_err_t storage_read_block(storage_handle_t handle) {
             }
         }
     }
-    if (handle->read_block_index) {
+    if (handle->read_block_index > 1) {
         handle->read_block_index -= 1; // advance to next read block
     } else {
         handle->read_block_index = handle->device->sector_count - 1; // wrap to last block
@@ -134,8 +136,8 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
     uint32_t low_block_index = 1; // binary search for the first unused block
     uint32_t counter = 0;
     (*handle)->read_block_index = low_block_index;
-    if(storage_read_block(*handle) == NVM_OK){
-         LOG_DEBUG("read block %d ok", low_block_index);
+    if (storage_read_block(*handle) == NVM_OK) {
+        LOG_DEBUG("read block %d ok", low_block_index);
         counter = (*handle)->read_buffer.block.header.counter;
     }
     while (low_block_index != high_block_index) {
@@ -161,7 +163,7 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
     }
     (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
     LOG_DEBUG("write counter %d , counter %d", (*handle)->write_counter, counter);
-    if((*handle)->write_counter == 0){
+    if ((*handle)->write_counter == 0) {
         low_block_index = 0;
     }
     (*handle)->read_block_index = low_block_index; // initialise read and write block indexes
@@ -204,33 +206,40 @@ nvm_err_t storage_write_sync(storage_handle_t handle) {
 nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxlen) {
     nvm_err_t error = NVM_OK;
     LOG_DEBUG("read string");
+
     if (handle->read_buffer.index == 0) {
-        error = storage_read_block(handle);
-    }
-    uint16_t end_index = handle->read_buffer.index; // skip trailing nulls in data buffer
-    if (error == NVM_OK) {
-        while (handle->read_buffer.block.data[end_index] == '\0') {
-            if (end_index) {
-                end_index -= 1;
-            } else {
-                error = NVM_FAIL; // end of buffer, no data
-                break;
+        error = storage_read_block(handle); // read new data buffer
+        if (error == NVM_OK) {
+            while ((handle->read_buffer.block.data[handle->read_buffer.index] == '\0') &&
+                   (handle->read_buffer.index != 0)) {
+                handle->read_buffer.index -= 1; // update index to end of last string in buffer
             }
+            if (handle->read_buffer.index == 0) {
+                LOG_DEBUG("read buffer empty");
+                error = NVM_EMPTY;
+            } else {
+                LOG_DEBUG("read buffer index %d", handle->read_buffer.index);
+            }
+        } else {
+            LOG_DEBUG("read block failed");
         }
     }
-    if (error == NVM_OK) {
-        uint16_t start_index = end_index; // find start of string in data buffer
-        while (handle->read_buffer.block.data[start_index] != '\0') {
-            if (start_index) {
-                start_index -= 1;
-            } else {
-                break;
-            }
+    if ((error == NVM_OK) && (handle->read_buffer.index != 0)) {
+
+        uint16_t end_index = handle->read_buffer.index - 1;  // this should be the null terminator
+        uint16_t start_index = end_index - 1;  // this should be the last character of the string
+        while ((handle->read_buffer.block.data[start_index] != '\0') && (start_index != 0)) {
+            start_index -= 1; // step back through characters to the null before the beginning of the string
         }
-        handle->read_buffer.index = start_index; // update index
+        if(start_index != 0) {
+            start_index += 1; // if its the null terminator, step forward to the start of the string
+        }
+        handle->read_buffer.index = start_index;
+        LOG_DEBUG("read string start : 0x%2.2X\tend : 0x%2.2X\tfrom 0x%4.4X", start_index, end_index, handle->read_block_index);
         if (end_index - start_index > maxlen) {
             error = NVM_FAIL;
         } else {
+            LOG_DEBUG("read string 0x%4.4X : 0x%2.2X : <%s>", handle->read_block_index, start_index, &handle->read_buffer.block.data[start_index]);
             strcpy(string, &handle->read_buffer.block.data[start_index]);
         }
     }
