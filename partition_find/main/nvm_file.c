@@ -5,7 +5,7 @@
 #include "log.h"
 #include "nvm_file.h"
 
-#define NVM_FILE_SECTOR_COUNT 8
+#define NVM_FILE_SECTOR_COUNT 16
 #define NVM_FILE_IMAGE_NAME "nvm_file_data.bin"
 
 static nvm_err_t nvm_file_open(void);

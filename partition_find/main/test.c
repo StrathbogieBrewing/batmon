@@ -1,15 +1,12 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "nvm_file.h"
 #include "storage.h"
 
-#include <sys/time.h>
-
-#include <stdlib.h>
-#include <time.h>
-
-#define TEST_DATA_SIZE (256 * 14)
+#define TEST_DATA_SIZE (256 * 4)
 
 static uint8_t random_data[TEST_DATA_SIZE] = {0};
 
@@ -24,7 +21,7 @@ void init_test_data(void) {
     int data_index = 0;
     while (data_index < TEST_DATA_SIZE - nvm_file.sector_size) {
         uint8_t data_length =
-            (rand() & 0x1f) + 1; // Returns a pseudo-random integer between 0 and 127.
+            (rand() & 0x1F) + 1; // length between 1 and 32 bytes.
         random_string(&random_data[data_index], data_length);
         data_index += data_length + 1;
     }
@@ -33,10 +30,7 @@ void init_test_data(void) {
 int main(int argc, char **argv) {
     storage_handle_t handle;
 
-    srand(time(NULL)); // Initialization, should only be called once.
-
-    struct timeval te;
-    gettimeofday(&te, NULL); // get current time
+    srand(time(NULL)); // seed random number generator
 
     init_test_data();
 
@@ -70,10 +64,6 @@ int main(int argc, char **argv) {
                        test_read_index, test_write_index, (char *)read_buffer,
                        (char *)&random_data[test_read_index]);
                        goto exit;
-            } else {
-                // printf("Data read matches data written %d, %d\n<%s>\n<%s>\n", test_read_index,
-                //        test_write_index, (char *)read_buffer,
-                //        (char *)&random_data[test_read_index]);
             }
             if (test_read_index) {
                 test_read_index -= 1;

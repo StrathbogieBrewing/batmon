@@ -120,7 +120,8 @@ static nvm_err_t storage_read_block(storage_handle_t handle) {
     //          block < (uint8_t *)&handle->read_buffer.block + STORAGE_BLOCK_SIZE; block++) {
     //         if (*block != handle->device->erased_value) {
     //             error = NVM_FAIL; // not erased
-    //             LOG_DEBUG("not erased at %ld : %d", block - (uint8_t *)&handle->read_buffer.block,
+    //             LOG_DEBUG("not erased at %ld : %d", block - (uint8_t
+    //             *)&handle->read_buffer.block,
     //                       *block);
     //             break;
     //         }
@@ -175,7 +176,7 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
         }
     }
     (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
-    LOG_DEBUG("write counter %d , counter %d", (*handle)->write_counter, counter);
+    LOG_DEBUG("write counter %d", (*handle)->write_counter);
     if ((*handle)->write_counter == 0) {
         low_block_index = 0;
     }
@@ -202,23 +203,22 @@ nvm_err_t storage_format(storage_handle_t handle) {
 
 nvm_err_t storage_read_sync(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    // LOG_DEBUG("read sync");
     handle->read_block_index = handle->write_block_index - 1;
     memcpy(&handle->read_buffer, &handle->write_buffer, sizeof(handle->read_buffer));
+    if (handle->read_buffer.index != 0){
+        handle->read_buffer.index -= 1; // step back to the null terminator
+    }
     return error;
 }
 
 nvm_err_t storage_write_sync(storage_handle_t handle) {
     nvm_err_t error = NVM_OK;
-    // LOG_DEBUG("write sync");
     error = storage_write_block(handle);
     return error;
 }
 
 nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxlen) {
     nvm_err_t error = NVM_OK;
-    // LOG_DEBUG("read string");
-
     if (handle->read_buffer.index == 0) {
         if (handle->read_block_index == handle->write_block_index) {
             error = NVM_EMPTY;
@@ -228,28 +228,23 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
         if (error == NVM_OK) {
             while ((handle->read_buffer.block.data[handle->read_buffer.index] == '\0') &&
                    (handle->read_buffer.index != 0)) {
-                handle->read_buffer.index -= 1; // update index to end of last string in buffer
+                handle->read_buffer.index -= 1; // update index to end of last character in buffer
             }
             if (handle->read_buffer.index == 0) {
                 LOG_DEBUG("read buffer empty");
                 error = NVM_EMPTY;
             } else {
-                // LOG_DEBUG("read buffer index %d", handle->read_buffer.index);
+                handle->read_buffer.index += 1; // step forward to the null terminator
             }
         } else {
             LOG_DEBUG("read block failed");
         }
     }
     if ((error == NVM_OK) && (handle->read_buffer.index != 0)) {
-
-        uint16_t end_index = handle->read_buffer.index - 1; // this should be the null terminator
+        uint16_t end_index = handle->read_buffer.index; // this should be the null terminator
         uint16_t start_index = end_index - 1; // this should be the last character of the string
         while ((handle->read_buffer.block.data[start_index] != '\0') && (start_index != 0)) {
-            start_index -=
-                1; // step back through characters to the null before the beginning of the string
-        }
-        if (start_index != 0) {
-            start_index += 1; // if its the null terminator, step forward to the start of the string
+            start_index -= 1; // step back to the null before the beginning of the string
         }
         handle->read_buffer.index = start_index;
         // LOG_DEBUG("read string start : 0x%2.2X\tend : 0x%2.2X\tfrom 0x%4.4X", start_index,
@@ -259,6 +254,9 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
         } else {
             // LOG_DEBUG("read string 0x%4.4X : 0x%2.2X : <%s>", handle->read_block_index,
             // start_index, &handle->read_buffer.block.data[start_index]);
+            if (start_index != 0) {
+                start_index += 1; // step forward to the start of the string
+            }
             strcpy(string, (char *)&handle->read_buffer.block.data[start_index]);
         }
     }
@@ -267,8 +265,7 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
 
 nvm_err_t storage_write_string(storage_handle_t handle, const char *string) {
     nvm_err_t error = NVM_OK;
-    // LOG_DEBUG("write string : %s", string);
-    uint16_t size = strlen(string) + 1; // we want to include the terminating null character
+    uint16_t size = strlen(string) + 1; // we also want to write the terminating null character
     if (handle->write_buffer.index + size > STORAGE_DATA_SIZE) {
         error = storage_write_block(handle);
     }
