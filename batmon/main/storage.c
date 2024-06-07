@@ -10,6 +10,8 @@
 
 #define STORAGE_MAGIC (htonl(0xDEADBEEF))
 
+static const char *TAG = "storage";
+
 typedef struct storage_header_t {
     uint32_t magic;
     uint32_t counter;
@@ -75,7 +77,7 @@ static nvm_err_t storage_write_block(storage_handle_t handle) {
         memset(&handle->write_buffer, 0, sizeof(handle->write_buffer));
         handle->write_block_index += 1;
     } else {
-        LOG_ERROR("nothing to write");
+        LOG_ERROR(TAG, "nothing to write");
     }
     return error;
 }
@@ -105,42 +107,45 @@ nvm_err_t storage_open(storage_handle_t *handle, nvm_device_t *device) {
     nvm_err_t error = NVM_OK;
     *handle = &storage_ctx;
     (*handle)->device = device;
-    (*handle)->device->open();
+    if((*handle)->device->open() != NVM_OK) {
+        LOG_ERROR(TAG, "open failed");
+        return NVM_FAIL;
+    }
     (*handle)->read_block_index = 0; // check if media is formatted by checking block 0
     if (storage_read_block(*handle) != NVM_OK) {
-        storage_format(*handle);
+        // storage_format(*handle);
     }
-    uint32_t high_block_index = (*handle)->device->sector_count - 1;
-    uint32_t low_block_index = 1; // binary search for the first unused block
-    uint32_t counter = 0;
-    (*handle)->read_block_index = low_block_index;
-    if (storage_read_block(*handle) == NVM_OK) {
-        counter = (*handle)->read_buffer.block.header.counter;
-    }
-    while (low_block_index != high_block_index) {
-        uint32_t mid_block_index = low_block_index + (high_block_index - low_block_index) / 2;
-        (*handle)->read_block_index = mid_block_index;
-        error = storage_read_block(*handle);
-        if (error == NVM_OK) {
-            if (counter < (*handle)->read_buffer.block.header.counter) {
-                low_block_index = mid_block_index;
-            } else {
-                high_block_index = mid_block_index;
-            }
-            counter = (*handle)->read_buffer.block.header.counter;
-        } else {
-            high_block_index = mid_block_index; // must be first pass of formated media
-            if (error != NVM_ERASED) {
-                LOG_ERROR("read block %d failed", mid_block_index);
-            }
-        }
-    }
-    (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
-    if ((*handle)->write_counter == 0) {
-        low_block_index = 0;
-    }
-    (*handle)->read_block_index = low_block_index; // initialise read and write block indexes
-    (*handle)->write_block_index = low_block_index + 1;
+    // uint32_t high_block_index = (*handle)->device->sector_count - 1;
+    // uint32_t low_block_index = 1; // binary search for the first unused block
+    // uint32_t counter = 0;
+    // (*handle)->read_block_index = low_block_index;
+    // if (storage_read_block(*handle) == NVM_OK) {
+    //     counter = (*handle)->read_buffer.block.header.counter;
+    // }
+    // while (low_block_index != high_block_index) {
+    //     uint32_t mid_block_index = low_block_index + (high_block_index - low_block_index) / 2;
+    //     (*handle)->read_block_index = mid_block_index;
+    //     error = storage_read_block(*handle);
+    //     if (error == NVM_OK) {
+    //         if (counter < (*handle)->read_buffer.block.header.counter) {
+    //             low_block_index = mid_block_index;
+    //         } else {
+    //             high_block_index = mid_block_index;
+    //         }
+    //         counter = (*handle)->read_buffer.block.header.counter;
+    //     } else {
+    //         high_block_index = mid_block_index; // must be first pass of formated media
+    //         if (error != NVM_ERASED) {
+    //             LOG_ERROR(TAG, "read block %d failed", (int)mid_block_index);
+    //         }
+    //     }
+    // }
+    // (*handle)->write_counter = (*handle)->read_buffer.block.header.counter + 1;
+    // if ((*handle)->write_counter == 0) {
+    //     low_block_index = 0;
+    // }
+    // (*handle)->read_block_index = low_block_index; // initialise read and write block indexes
+    // (*handle)->write_block_index = low_block_index + 1;
     return error;
 }
 
@@ -153,7 +158,7 @@ nvm_err_t storage_format(storage_handle_t handle) {
         storage_write_string(handle, "NVM STRING LOGGER");
         storage_write_sync(handle);
     } else {
-        LOG_ERROR("erase failed");
+        LOG_ERROR(TAG, "erase failed");
     }
     return error;
 }
@@ -188,13 +193,13 @@ nvm_err_t storage_read_string(storage_handle_t handle, char *string, size_t maxl
                 handle->read_buffer.index -= 1; // update index to end of last character in buffer
             }
             if (handle->read_buffer.index == 0) {
-                LOG_ERROR("read buffer empty");
+                LOG_ERROR(TAG, "read buffer empty");
                 error = NVM_EMPTY;
             } else {
                 handle->read_buffer.index += 1; // step forward to the null terminator
             }
         } else {
-            LOG_ERROR("read block failed");
+            LOG_ERROR(TAG, "read block failed");
         }
     }
     if ((error == NVM_OK) && (handle->read_buffer.index != 0)) {
